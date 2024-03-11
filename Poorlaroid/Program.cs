@@ -23,6 +23,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
+using SadConsole.Configuration;
 
 namespace Poorlaroid
 {
@@ -74,101 +75,7 @@ namespace Poorlaroid
 		public abstract void Render(Color input, ColoredGlyph output);
 	}
 
-	public class TerminalComponent : SadConsole.Components.IComponent
-	{
-		public uint SortOrder => 0;
-
-		public bool IsUpdate => false;
-
-		public bool IsRender => false;
-
-		public bool IsMouse => false;
-
-		public bool IsKeyboard => false;
-
-		public void OnAdded(IScreenObject host)
-		{
-			if (host is Console console)
-			{
-				_editor = console;
-				_editor.Cursor.KeyboardPreview += KeyReceived;
-			}
-			else
-			{
-				throw new ArgumentException();
-			}
-		}
-
-		public void OnRemoved(IScreenObject host) 
-		{
-			_editor.Cursor.KeyboardPreview -= KeyReceived;
-		}
-
-		public void ProcessKeyboard(IScreenObject host, Keyboard keyboard, out bool handled) { throw new NotImplementedException(); }
-
-		public void ProcessMouse(IScreenObject host, MouseScreenObjectState state, out bool handled) { throw new NotImplementedException(); }
-
-		public void Render(IScreenObject host, TimeSpan delta) { throw new NotImplementedException(); }
-
-		public void Update(IScreenObject host, TimeSpan delta) { throw new NotImplementedException(); }
-
-		Console _editor;
-
-		StringBuilder _sb = new StringBuilder();
-
-		public event Action<string> InputReceived;
-
-		protected virtual void OnInputReceived(string value) => InputReceived?.Invoke(value);
-
-		public void ClearInput()
-		{
-			_editor.Clear(0, _editor.Cursor.Position.Y, _editor.Cursor.Position.X);
-			_editor.Cursor.Position = _editor.Cursor.Position.WithX(0);
-			_sb.Clear();
-		}
-
-		void KeyReceived(object sender, SadConsole.Input.KeyboardHandledKeyEventArgs e)
-		{
-			var cursor = (SadConsole.Components.Cursor)sender;
-			switch (e.Key.Key)
-			{
-				case Keys.Up:
-				case Keys.Down:
-				case Keys.Left:
-				case Keys.Right:
-					e.IsHandled = true;
-					break;
-
-				case Keys.Back:
-					if (_sb.Length > 0)
-					{
-						_sb.Remove(_sb.Length - 1, 1);
-						_editor.Clear(cursor.Position.X, cursor.Position.Y);
-					}
-					else
-					{
-						e.IsHandled = true;
-					}
-					break;
-
-				case Keys.Enter:
-					_editor.Cursor.NewLine();
-					OnInputReceived(_sb.ToString());
-					_sb.Clear();
-					e.IsHandled = true;
-					break;
-
-				default:
-					if (!char.IsControl(e.Key.Character))
-						_sb.Append(e.Key.Character);
-					else
-						e.IsHandled = true;
-					break;
-
-			}
-		}
-	}
-
+	
 	internal class Program
 	{
 		enum State
@@ -185,11 +92,6 @@ namespace Poorlaroid
 
 		State _state;
 		VideoCaptureDevice _camera;
-		Console _console;
-		ScreenSurface _view;
-		Button _shaderButton;
-		Button _captureButton;
-		Button _optionsButton;
 		FilterInfo[] _cams;
 		ISadShader _shader;
 		int _selectedShader = -1;
@@ -202,47 +104,32 @@ namespace Poorlaroid
 			return path;
 		});
 
-		static ISadShader[] _shaders = new ISadShader[]
-		{
+		static ISadShader[] _shaders =
+		[
 			new SolidShader(),
 			new GlyphShader(),
 			new CamsoleShader(),
 			new RainbowShader(),
 			new NoireShader(),
 			new OnionShader(),
-		};
+		];
 
-		static SadConsole.UI.Themes.ThemeBase ButtonTheme = new SadConsole.UI.Themes.ButtonTheme()
-		{
-			ShowEnds = false,
-		};
-
-		static Colors CaptureTheme = new Colors()
-		{
-			Appearance_ControlNormal = new(Color.White, Color.Red),
-			Appearance_ControlFocused = new(Color.White, Color.Red)
-		};
-
-		static Colors ControlTheme = new()
-		{
-			Appearance_ControlNormal = new(Color.Black, Color.SandyBrown),
-			Appearance_ControlFocused = new(Color.Black, Color.SandyBrown),
-			Appearance_ControlSelected = new(Color.Red, Color.Transparent)
-		};
-
-
-
+	
 		private static void Main(string[] args)
 		{
 			var program = new Program();
-			SadConsole.Settings.WindowTitle = "Poorlaroid";
-			SadConsole.Settings.UseDefaultExtendedFont = true;
-			
-			SadConsole.Game.Create(ScreenWidth, ScreenHeight);
-			SadConsole.Game.Instance.OnStart = program.Init;
-			SadConsole.Game.Instance.OnEnd = program.End;
-			SadConsole.Game.Instance.Run();
-			SadConsole.Game.Instance.Dispose();
+			Settings.WindowTitle = "Poorlaroid";
+			Settings.UseDefaultExtendedFont = true;
+
+			var config = new SadConsole.Configuration.Builder()
+				.SetScreenSize(ScreenWidth, ScreenHeight)
+				.SetStartingScreen(game => new View(game.ScreenCellsX, game.ScreenCellsY))
+				.OnStart(program.OnStart)
+				.OnEnd(program.OnEnd);
+
+			Game.Create(config);
+			Game.Instance.Run();
+			Game.Instance.Dispose();
 		}
 
 		private void ChangeState(State value)
@@ -290,12 +177,12 @@ namespace Poorlaroid
 			}
 		}
 
-		private void End()
+		void OnEnd(object sender, GameHost host)
 		{
 			ChangeState(State.Suspending);
 		}
 
-		private void Init()
+		void OnStart(object sender, GameHost host)
 		{
 			BuildUI();
 			SwapShader();
@@ -367,81 +254,6 @@ namespace Poorlaroid
 			}
 		}
 
-		private void BuildUI()
-		{
-			var console = new ControlsConsole(ScreenWidth, ScreenHeight);
-			console.DefaultBackground = Color.AntiqueWhite;
-			console.DefaultForeground = Color.LightGray;
-			console.Clear();
-
-
-			var mainGrid = new GridLayout(ScreenWidth, ScreenHeight, new GridLength[] { "*" }, new GridLength[] { "*", "3" }, new(4, 2));
-			var viewCell = mainGrid[0, 0].Expand(-2, -1);
-			var controlCell = mainGrid[0, 1];
-			var menuGrid = new GridLayout(mainGrid[0, 1].Expand(4, 0), new GridLength[] { "*", "14", "*" }, new GridLength[] { "*" }, new(4, 0));
-
-
-			var rainbow = new Color[] { Color.Magenta, Color.Red, Color.Orange, Color.Yellow, Color.LimeGreen, Color.DeepSkyBlue };
-			var rainbowThickness = 3;
-			//var rainbowRect = new SadRogue.Primitives.Rectangle((ScreenWidth - rainbow.Length * 2) / 2, 0, 2, ScreenHeight);
-			var rainbowRect = new SadRogue.Primitives.Rectangle(0, (viewCell.Height - rainbow.Length * rainbowThickness) / 2 + viewCell.Y, ScreenWidth, rainbowThickness);
-			
-			foreach (var color in rainbow)
-			{
-				console.Fill(rainbowRect, background: color);
-				rainbowRect = rainbowRect.TranslateY(rainbowRect.Height);
-			}
-
-			Game.Instance.Screen = console;
-			Game.Instance.DestroyDefaultStartingConsole();
-
-			
-
-			_console = new Console(viewCell.Width, viewCell.Height)
-			{
-				Position = viewCell.Position,
-				DefaultBackground = Color.Transparent,
-				DefaultForeground = Color.White,
-				FocusOnMouseClick = true,
-			};
-
-			var terminal = new TerminalComponent();
-			terminal.InputReceived += InputReceived;
-
-			_view = new ScreenSurface(viewCell.Width, viewCell.Height) { Position = viewCell.Position };
-			_console.Cursor.PrintAppearanceMatchesHost = false;
-			_console.Cursor.PrintAppearance.Background = Color.Black;
-			_console.Cursor.PrintAppearance.Foreground = Color.White;
-			_console.SadComponents.Add(terminal);
-
-			console.Fill(mainGrid[0, 0], background: Color.Black);
-			console.Children.Add(_view);
-			console.Children.Add(_console);
-
-			//_shaderButton = new Button(26, controlCell.Height);
-			//_shaderButton.PlaceWithin(controlCell, Direction.Types.Left);
-			_shaderButton = menuGrid.Place(0, 0, cell => new Button(cell.Width, cell.Height));
-			_shaderButton.Theme = ButtonTheme;
-			_shaderButton.SetThemeColors(ControlTheme);
-			_shaderButton.Click += ShaderSwapped;
-			console.Controls.Add(_shaderButton);
-
-			//_captureButton = new Button(11, controlCell.Height) { Text = "CAPTURE" };
-			//_captureButton.PlaceWithin(controlCell, Direction.Types.Right);
-			_captureButton = menuGrid.Place(1, 0, cell => new Button(cell.Width, cell.Height) { Text = "CAPTURE"});
-			_captureButton.Theme = ButtonTheme;
-			_captureButton.SetThemeColors(CaptureTheme);
-			_captureButton.Click += CaptureClick;
-			console.Controls.Add(_captureButton);
-
-			//_optionsButton = new Button(11, controlCell.Height) { Text = "OPTIONS" };
-			//_optionsButton.PlaceRelativeTo(_captureButton, Direction.Types.Left, 4);
-			_optionsButton = menuGrid.Place(2, 0, cell => new Button(cell.Width, cell.Height));
-			_optionsButton.Theme = ButtonTheme;
-			_optionsButton.SetThemeColors(ControlTheme);
-			_optionsButton.Click += OptionsClicked;
-			console.Controls.Add(_optionsButton);
-		}
 
 		private bool IsMatch(string s, string pattern, out Match match)
 		{
@@ -660,37 +472,6 @@ namespace Poorlaroid
 				_renderCancel = null;
 				source.Dispose();
 			}
-		}
-
-		static async void GlyphChart(int table)
-		{
-			if (table < 0)
-				throw new ArgumentException();
-
-			var hex = "0123456789ABCDEF";
-			var s = 16+1;
-			var screen = new ScreenSurface(s, s);
-			var surface = screen.Surface;
-
-			for (int i = 0; i < 16; i++)
-			{
-				surface.SetGlyph(i + 1, 0, hex[i]);
-				surface.SetGlyph(0, i + 1, hex[i]);
-			}
-
-			for (int y = 0; y < 16; y++)
-			{
-				for (int x = 0; x < 16; x++)
-				{
-					var glyph = y * 16 + x + table * 256;
-					surface.SetGlyph(x + 1, y + 1, glyph);
-				}
-			}
-
-			screen.Render(TimeSpan.MinValue);
-			var output = screen.Renderer.Output;
-			using (var bitmap = await CreateBitmap(output.Width, output.Height, output.GetPixels()))
-				Save(bitmap);
 		}
 	}
 }
