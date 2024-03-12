@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace Poorlaroid.Commands
 {
-	class CameraCommand(Controller controller) : Command("cam")
+	class CameraCommand(ViewModel controller) : Command("cam")
 	{
 	}
 }

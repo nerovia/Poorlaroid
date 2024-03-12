@@ -51,7 +51,7 @@ namespace Poorlaroid
 		[FieldOffset(0)] public byte b;
 	}
 
-	interface ISadShader
+	interface IPoorShader
 	{
 		public string Name { get; }
 
@@ -62,7 +62,7 @@ namespace Poorlaroid
 		public void Render(Color input, ColoredGlyph output);
 	}
 
-	internal abstract class SadShader : ISadShader
+	internal abstract class SadShader : IPoorShader
 	{
 		public abstract string Name { get; }
 
@@ -93,7 +93,7 @@ namespace Poorlaroid
 		State _state;
 		VideoCaptureDevice _camera;
 		FilterInfo[] _cams;
-		ISadShader _shader;
+		IPoorShader _shader;
 		int _selectedShader = -1;
 		bool _flip;
 		CancellationTokenSource _renderCancel;
@@ -104,32 +104,53 @@ namespace Poorlaroid
 			return path;
 		});
 
-		static ISadShader[] _shaders =
+		static IPoorShader[] _shaders =
 		[
-			new SolidShader(),
-			new GlyphShader(),
-			new CamsoleShader(),
-			new RainbowShader(),
-			new NoireShader(),
-			new OnionShader(),
+			
 		];
 
 	
 		private static void Main(string[] args)
 		{
-			var program = new Program();
+			var viewModel = new ViewModel()
+			{
+				Shaders =
+				{
+					new SolidShader(),
+					new GlyphShader(),
+					new CamsoleShader(),
+					new RainbowShader(),
+					new NoireShader(),
+					new OnionShader(),
+				}
+			};
+
+			var cams = viewModel.FetchAvailableCameras();
+			viewModel.SelectedCamera = cams.Count > 0 ? cams[0] : null;
+
 			Settings.WindowTitle = "Poorlaroid";
 			Settings.UseDefaultExtendedFont = true;
 
 			var config = new SadConsole.Configuration.Builder()
 				.SetScreenSize(ScreenWidth, ScreenHeight)
-				.SetStartingScreen(game => new View(game.ScreenCellsX, game.ScreenCellsY))
-				.OnStart(program.OnStart)
-				.OnEnd(program.OnEnd);
+				.SetStartingScreen(game => new View(viewModel, game.ScreenCellsX, game.ScreenCellsY))
+				.OnStart(Start)
+				.OnEnd(End);
 
 			Game.Create(config);
 			Game.Instance.Run();
 			Game.Instance.Dispose();
+		}
+
+		static void Start(object sender, GameHost host)
+		{
+			if (host.Screen is View view)
+				view.Init();
+		}
+
+		static void End()
+		{
+
 		}
 
 		private void ChangeState(State value)
@@ -370,7 +391,7 @@ namespace Poorlaroid
 			SwapShader(_shaders[_selectedShader]);
 		}
 
-		private void SwapShader(ISadShader shader)
+		private void SwapShader(IPoorShader shader)
 		{
 			_shader = shader;
 			_shaderButton.Text = _shader.Name.ToUpper();
@@ -396,7 +417,7 @@ namespace Poorlaroid
 		static void Save(Bitmap bitmap)
 		{
 			var folder = _saveFolder.Value; // Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
-			var path = Path.Combine(folder, $"poorlaroid{DateTime.Now.ToString("yyMMdd_HH_mm_ss")}.bmp");
+			var path = Path.Combine(folder, $"poorlaroid{DateTime.Now:yyMMdd_HH_mm_ss)}.bmp");
 			bitmap.Save(path);
 		}
 

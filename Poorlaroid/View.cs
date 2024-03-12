@@ -3,25 +3,31 @@ using SadConsole;
 using SadConsole.UI;
 using SadConsole.UI.Controls;
 using SadRogue.Primitives;
+using System;
+using System.ComponentModel;
 using Console = SadConsole.Console;
 
 namespace Poorlaroid
 {
 	class View : ControlsConsole
 	{
-		public Console CommandConsole;
-		public ScreenSurface CameraView;
-		public Button CaptureButton;
-		public Button CommandToggle;
-		public Button ShaderToggle;
+		public ViewModel ViewModel { get; }
+		public bool IsInitialized { get; set; }
 
-		public View(int width, int height) : base(width, height)
+		public Console? CommandConsole;
+		public ScreenSurface? CameraView;
+		public Button? CaptureButton;
+		public Button? CommandToggle;
+		public Button? ShaderToggle;
+
+		public View(ViewModel viewModel, int width, int height) : base(width, height)
 		{
-			DrawLayout();
+			ViewModel = viewModel;
+			ViewModel.PropertyChanged += (s, e) => Refresh();
 		}
 
-		void DrawLayout()
-		{			
+		public void Init()
+		{	
 			var mainGrid = new GridLayout(Width, Height, ["*"], ["*", "3"], new(4, 2));
 			var menuGrid = new GridLayout(mainGrid[0, 1].Expand(4, 0), ["*", "14", "*"], ["*"], new(4, 0));
 
@@ -91,6 +97,26 @@ namespace Poorlaroid
 			});
 			CommandToggle.SetThemeColors(Style.ControlColors);
 			Controls.Add(CommandToggle);
+
+			IsInitialized = true;
+
+			Refresh();
 		}
+
+		public void Refresh()
+		{
+			if (!IsInitialized)
+				return;
+			ShaderToggle!.Text = ViewModel.SelectedShader?.Name.ToUpper() ?? "NO SHADER";
+			CaptureButton!.IsEnabled = ViewModel.SelectedCamera != null;
+		}
+
+		void ShuffleShader()
+		{
+			var index = ViewModel.SelectedShaderIndex;
+			ViewModel.SelectedShaderIndex = ++index > ViewModel.Shaders.Count ? -1 : index;
+		}
+
+		void CaptureImage() => ViewModel.CaptureImage();
 	}
 }
