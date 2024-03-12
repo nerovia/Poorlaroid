@@ -42,7 +42,6 @@ namespace Poorlaroid
 			Surface.DefaultBackground = Style.AppBackground;
 			Surface.DefaultForeground = Style.AppForeground;
 			Surface.Clear();
-			Surface.Fill(mainGrid[0, 0], background: Color.Black);
 
 			// Draw Rainbow
 			var rainbowThickness = 3;
@@ -69,6 +68,8 @@ namespace Poorlaroid
 
 			// Create Camera View
 			CameraView = new ScreenSurface(viewRect.Width, viewRect.Height) { Position = viewRect.Position };
+			CameraView.Surface.DefaultBackground = Color.Black;
+			CameraView.Surface.Clear();
 			Children.Add(CameraView);
 
 			// Create Shader Toggle Button
@@ -78,6 +79,7 @@ namespace Poorlaroid
 				ShowEnds = false,
 			});
 			ShaderToggle.SetThemeColors(Style.ControlColors);
+			ShaderToggle.Click += (s, e) => ToggleShader();
 			Controls.Add(ShaderToggle);
 
 			// Create Capture Button
@@ -111,10 +113,10 @@ namespace Poorlaroid
 			CaptureButton!.IsEnabled = ViewModel.SelectedCamera != null;
 		}
 
-		void ShuffleShader()
+		void ToggleShader()
 		{
 			var index = ViewModel.SelectedShaderIndex;
-			ViewModel.SelectedShaderIndex = ++index > ViewModel.Shaders.Count ? -1 : index;
+			ViewModel.SelectedShaderIndex = ++index >= ViewModel.Shaders.Count ? -1 : index;
 		}
 
 		void CaptureImage() => ViewModel.CaptureImage();
